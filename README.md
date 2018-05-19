@@ -1,3 +1,4 @@
+This is just a clone of the project listed below to make testing API calls easier for me.
 --- 
 Services: active-directory
 platforms: Android

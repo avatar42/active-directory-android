@@ -45,22 +45,24 @@ public class MainActivity extends AppCompatActivity {
 
     /* UI & Debugging Variables */
     private static final String TAG = MainActivity.class.getSimpleName();
-    Button callGraphButton;
+    Button callGraphMeButton;
+    Button callGraphListButton;
     Button signOutButton;
 
     /* Azure AD Constants */
     /* Authority is in the form of https://login.microsoftonline.com/yourtenant.onmicrosoft.com */
     private static final String AUTHORITY = "https://login.microsoftonline.com/common";
     /* The clientID of your application is a unique identifier which can be obtained from the app registration portal */
-    private static final String CLIENT_ID = "<ENTER YOUR CLIENT ID HERE>";
+    private static final String CLIENT_ID = "10a2d9f2-3571-4209-be4e-cf65ff348b36";
     /* Resource URI of the endpoint which will be accessed */
     private static final String RESOURCE_ID = "https://graph.microsoft.com/";
     /* The Redirect URI of the application (Optional) */
-    private static final String REDIRECT_URI = "<ENTER YOUR REDIRECT URI HERE>";
+    private static final String REDIRECT_URI = "https://citizant.sharepoint.com";
 
     /* Microsoft Graph Constants */
-    private final static String MSGRAPH_URL = "https://graph.microsoft.com/v1.0/me";
-
+    private final static String MSGRAPH_URL = "https://graph.microsoft.com/v1.0/";
+    private final static String MSGRAPH_ME = "me";
+    private final static String MSGRAPH_LIST = "sites/root/lists";
     /* Azure AD Variables */
     private AuthenticationContext mAuthContext;
     private AuthenticationResult mAuthResult;
@@ -69,10 +71,14 @@ public class MainActivity extends AppCompatActivity {
     private Handler mAcquireTokenHandler;
     /* Boolean variable to ensure invocation of interactive sign-in only once in case of multiple  acquireTokenSilent call failures */
     private static AtomicBoolean sIntSignInInvoked = new AtomicBoolean();
-    /* Constant to send message to the mAcquireTokenHandler to do acquire token with Prompt.Auto*/
-    private static final int MSG_INTERACTIVE_SIGN_IN_PROMPT_AUTO = 1;
-    /* Constant to send message to the mAcquireTokenHandler to do acquire token with Prompt.Always */
-    private static final int MSG_INTERACTIVE_SIGN_IN_PROMPT_ALWAYS = 2;
+    /* Constant to send me message to the mAcquireTokenHandler to do acquire token with Prompt.Auto*/
+    private static final int MSG_INTERACTIVE_SIGN_IN_PROMPT_AUTO_ME = 1;
+    /* Constant to send me message to the mAcquireTokenHandler to do acquire token with Prompt.Always */
+    private static final int MSG_INTERACTIVE_SIGN_IN_PROMPT_ALWAYS_ME = 2;
+    /* Constant to send list message to the mAcquireTokenHandler to do acquire token with Prompt.Auto*/
+    private static final int MSG_INTERACTIVE_SIGN_IN_PROMPT_AUTO_LIST = 3;
+    /* Constant to send list message to the mAcquireTokenHandler to do acquire token with Prompt.Always */
+    private static final int MSG_INTERACTIVE_SIGN_IN_PROMPT_ALWAYS_LIST = 4;
 
     /* Constant to store user id in shared preferences */
     private static final String USER_ID = "user_id";
@@ -99,15 +105,21 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        callGraphButton = (Button) findViewById(R.id.callGraph);
-        signOutButton = (Button) findViewById(R.id.clearCache);
-
-        callGraphButton.setOnClickListener(new View.OnClickListener() {
+        callGraphMeButton = (Button) findViewById(R.id.callGraphMe);
+        callGraphMeButton.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-                onCallGraphClicked();
+                onCallGraphMeClicked();
             }
         });
 
+        callGraphListButton = (Button) findViewById(R.id.callGraphList);
+        callGraphListButton.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                onCallGraphListClicked();
+            }
+        });
+
+        signOutButton = (Button) findViewById(R.id.clearCache);
         signOutButton.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 onSignOutClicked();
@@ -123,10 +135,14 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void handleMessage(Message msg) {
                 if( sIntSignInInvoked.compareAndSet(false, true)) {
-                    if (msg.what == MSG_INTERACTIVE_SIGN_IN_PROMPT_AUTO){
-                        mAuthContext.acquireToken(getActivity(), RESOURCE_ID, CLIENT_ID, REDIRECT_URI, PromptBehavior.Auto, getAuthInteractiveCallback());
-                    }else if(msg.what == MSG_INTERACTIVE_SIGN_IN_PROMPT_ALWAYS){
-                        mAuthContext.acquireToken(getActivity(), RESOURCE_ID, CLIENT_ID, REDIRECT_URI, PromptBehavior.Always, getAuthInteractiveCallback());
+                    if (msg.what == MSG_INTERACTIVE_SIGN_IN_PROMPT_AUTO_ME){
+                        mAuthContext.acquireToken(getActivity(), RESOURCE_ID, CLIENT_ID, REDIRECT_URI, PromptBehavior.Auto, getAuthInteractiveCallback(MSGRAPH_ME));
+                    }else if(msg.what == MSG_INTERACTIVE_SIGN_IN_PROMPT_ALWAYS_ME){
+                        mAuthContext.acquireToken(getActivity(), RESOURCE_ID, CLIENT_ID, REDIRECT_URI, PromptBehavior.Always, getAuthInteractiveCallback(MSGRAPH_ME));
+                    } else if (msg.what == MSG_INTERACTIVE_SIGN_IN_PROMPT_AUTO_LIST){
+                        mAuthContext.acquireToken(getActivity(), RESOURCE_ID, CLIENT_ID, REDIRECT_URI, PromptBehavior.Auto, getAuthInteractiveCallback(MSGRAPH_LIST));
+                    }else if(msg.what == MSG_INTERACTIVE_SIGN_IN_PROMPT_ALWAYS_LIST){
+                        mAuthContext.acquireToken(getActivity(), RESOURCE_ID, CLIENT_ID, REDIRECT_URI, PromptBehavior.Always, getAuthInteractiveCallback(MSGRAPH_LIST));
                     }
                 }
             }
@@ -146,7 +162,7 @@ public class MainActivity extends AppCompatActivity {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
         String userId = preferences.getString(USER_ID, "");
         if(!TextUtils.isEmpty(userId)){
-            mAuthContext.acquireTokenSilentAsync(RESOURCE_ID, CLIENT_ID, userId, getAuthSilentCallback());
+            mAuthContext.acquireTokenSilentAsync(RESOURCE_ID, CLIENT_ID, userId, getAuthSilentCallback(MSGRAPH_ME));
         }
     }
 
@@ -154,7 +170,7 @@ public class MainActivity extends AppCompatActivity {
     // Core Auth methods used by ADAL
     // ==================================
     // onActivityResult() - handles redirect from System browser
-    // onCallGraphClicked() - attempts to get tokens for graph, if it succeeds calls graph & updates UI
+    // onCallGraphMeClicked() - attempts to get tokens for graph, if it succeeds calls graph & updates UI
     // callGraphAPI() - called on successful token acquisition which makes an HTTP request to graph
     // onSignOutClicked() - Signs user out of the app & updates UI
     //
@@ -166,14 +182,22 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /*
-     * End user clicked call Graph API button, time for Auth
+     * End user clicked call Graph me API button, time for Auth
      * Use ADAL to get an Access token for the Microsoft Graph API
      */
-    private void onCallGraphClicked() {
-        mAcquireTokenHandler.sendEmptyMessage(MSG_INTERACTIVE_SIGN_IN_PROMPT_AUTO);
+    private void onCallGraphMeClicked() {
+        mAcquireTokenHandler.sendEmptyMessage(MSG_INTERACTIVE_SIGN_IN_PROMPT_AUTO_ME);
     }
 
-    private void callGraphAPI() {
+    /*
+     * End user clicked call Graph me API button, time for Auth
+     * Use ADAL to get an Access token for the Microsoft Graph API
+     */
+    private void onCallGraphListClicked() {
+        mAcquireTokenHandler.sendEmptyMessage(MSG_INTERACTIVE_SIGN_IN_PROMPT_AUTO_LIST);
+    }
+
+    private void callGraphAPI(String cmd) {
         Log.d(TAG, "Starting volley request to graph");
 
         /* Make sure we have a token to send to graph */
@@ -187,7 +211,7 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             Log.d(TAG, "Failed to put parameters: " + e.toString());
         }
-        JsonObjectRequest request = new JsonObjectRequest(Request.Method.GET, MSGRAPH_URL,
+        JsonObjectRequest request = new JsonObjectRequest(Request.Method.GET, MSGRAPH_URL+cmd,
                 parameters,new Response.Listener<JSONObject>() {
             @Override
             public void onResponse(JSONObject response) {
@@ -245,7 +269,7 @@ public class MainActivity extends AppCompatActivity {
     private void updateSuccessUI() {
         // Called on success from /me endpoint
         // Removed call Graph API button and paint Sign out
-        callGraphButton.setVisibility(View.INVISIBLE);
+        callGraphMeButton.setVisibility(View.INVISIBLE);
         signOutButton.setVisibility(View.VISIBLE);
         findViewById(R.id.welcome).setVisibility(View.VISIBLE);
         ((TextView) findViewById(R.id.welcome)).setText("Welcome, " +
@@ -256,7 +280,7 @@ public class MainActivity extends AppCompatActivity {
 
     @SuppressLint("SetTextI18n")
     private void updateSignedOutUI() {
-        callGraphButton.setVisibility(View.VISIBLE);
+        callGraphMeButton.setVisibility(View.VISIBLE);
         signOutButton.setVisibility(View.INVISIBLE);
         findViewById(R.id.welcome).setVisibility(View.INVISIBLE);
         findViewById(R.id.graphData).setVisibility(View.INVISIBLE);
@@ -279,7 +303,7 @@ public class MainActivity extends AppCompatActivity {
      * Looks if tokens are in the cache (refreshes if necessary and if we don't forceRefresh)
      * else errors that we need to do an interactive request.
      */
-    private AuthenticationCallback<AuthenticationResult> getAuthSilentCallback() {
+    private AuthenticationCallback<AuthenticationResult> getAuthSilentCallback(final String cmd) {
         return new AuthenticationCallback<AuthenticationResult>() {
             @Override
             public void onSuccess(AuthenticationResult authenticationResult) {
@@ -287,7 +311,7 @@ public class MainActivity extends AppCompatActivity {
                         || authenticationResult.getStatus()!= AuthenticationResult.AuthenticationStatus.Succeeded){
                     Log.d(TAG, "Silent acquire token Authentication Result is invalid, retrying with interactive");
                     /* retry with interactive */
-                    mAcquireTokenHandler.sendEmptyMessage(MSG_INTERACTIVE_SIGN_IN_PROMPT_AUTO);
+                    mAcquireTokenHandler.sendEmptyMessage(MSG_INTERACTIVE_SIGN_IN_PROMPT_AUTO_ME);
                     return;
                 }
                 /* Successfully got a token, call graph now */
@@ -295,7 +319,7 @@ public class MainActivity extends AppCompatActivity {
                 /* Store the mAuthResult */
                 mAuthResult = authenticationResult;
                 /* call graph */
-                callGraphAPI();
+                callGraphAPI(cmd);
 
                 /* update the UI to post call graph state */
                 runOnUiThread(new Runnable() {
@@ -316,7 +340,7 @@ public class MainActivity extends AppCompatActivity {
                     logHttpErrors(authException);
                     /*  Tokens expired or no session, retry with interactive */
                     if (error == ADALError.AUTH_REFRESH_FAILED_PROMPT_NOT_ALLOWED ) {
-                        mAcquireTokenHandler.sendEmptyMessage(MSG_INTERACTIVE_SIGN_IN_PROMPT_AUTO);
+                        mAcquireTokenHandler.sendEmptyMessage(MSG_INTERACTIVE_SIGN_IN_PROMPT_AUTO_ME);
                     }else if(error == ADALError.NO_NETWORK_CONNECTION_POWER_OPTIMIZATION){
                         /* Device is in Doze mode or App is in stand by mode.
                            Wake up the app or show an appropriate prompt for the user to take action
@@ -326,7 +350,7 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
                 /* Attempt an interactive on any other exception */
-                mAcquireTokenHandler.sendEmptyMessage(MSG_INTERACTIVE_SIGN_IN_PROMPT_AUTO);
+                mAcquireTokenHandler.sendEmptyMessage(MSG_INTERACTIVE_SIGN_IN_PROMPT_AUTO_ME);
             }
         };
     }
@@ -353,7 +377,7 @@ public class MainActivity extends AppCompatActivity {
     /* Callback used for interactive request.  If succeeds we use the access
      * token to call the Microsoft Graph. Does not check cache
      */
-    private AuthenticationCallback<AuthenticationResult> getAuthInteractiveCallback() {
+    private AuthenticationCallback<AuthenticationResult> getAuthInteractiveCallback(final String cmd) {
         return new AuthenticationCallback<AuthenticationResult>() {
             @Override
             public void onSuccess(AuthenticationResult authenticationResult) {
@@ -374,7 +398,7 @@ public class MainActivity extends AppCompatActivity {
                 preferences.edit().putString(USER_ID, authenticationResult.getUserInfo().getUserId()).apply();
 
                 /* call graph */
-                callGraphAPI();
+                callGraphAPI(cmd);
 
                 /* update the UI to post call graph state */
                 runOnUiThread(new Runnable() {
@@ -398,7 +422,7 @@ public class MainActivity extends AppCompatActivity {
                     }else if(error== ADALError.AUTH_FAILED_NO_TOKEN){
                         // In this case ADAL has found a token in cache but failed to retrieve it.
                         // Retry interactive with Prompt.Always to ensure we do an interactive sign in
-                        mAcquireTokenHandler.sendEmptyMessage(MSG_INTERACTIVE_SIGN_IN_PROMPT_ALWAYS);
+                        mAcquireTokenHandler.sendEmptyMessage(MSG_INTERACTIVE_SIGN_IN_PROMPT_ALWAYS_ME);
                     }else if(error == ADALError.NO_NETWORK_CONNECTION_POWER_OPTIMIZATION){
                         /* Device is in Doze mode or App is in stand by mode.
                            Wake up the app or show an appropriate prompt for the user to take action

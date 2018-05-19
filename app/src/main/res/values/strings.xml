@@ -1,7 +1,8 @@
 <resources>
     <string name="app_name">AzureADSampleApp</string>
     <string name="welcome_text">Welcome, </string>
-    <string name="call_graph">Call Microsoft Graph </string>
+    <string name="call_me_graph">Get profile data</string>
+    <string name="call_list_graph">Get list data</string>
     <string name="loading">Getting data from Graph...</string>
     <string name="sign_out">Sign Out</string>
 </resources>
